@@ -43,7 +43,7 @@ namespace ultraviolettesting
             kb = Ultraviolet.GetInput().GetKeyboard();
             mouse = Ultraviolet.GetInput().GetMouse();
             window = Ultraviolet.GetPlatform().Windows.GetPrimary();
-            window.ClientSize = new Size2(500, 500);
+            window.ClientSize = new Size2(700, 700);
             window.MaximumClientSize = window.ClientSize;
             base.OnInitialized();
         }
@@ -56,13 +56,11 @@ namespace ultraviolettesting
             this.spriteBatch = SpriteBatch.Create();
 
             this.cells = new Cell[window.DrawableSize.Width / Cell.cellSize][];
-            for (int i = 0; i < cells.Length; i++)
-            {
-                cells[i] = new Cell[window.DrawableSize.Height / Cell.cellSize];
-            }
+
 
             for (int x = 0; x < window.DrawableSize.Width / Cell.cellSize; x++)
             {
+                cells[x] = new Cell[window.DrawableSize.Height / Cell.cellSize];
                 for (int y = 0; y < window.DrawableSize.Height / Cell.cellSize; y++)
                 {
                     cells[x][y] = new Cell(cellImg, window, new Vector2(x, y), ref cells);
