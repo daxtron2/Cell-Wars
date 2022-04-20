@@ -1,4 +1,6 @@
-﻿using System;
+﻿using CellWars.BreedableTypes;
+using KGySoft.CoreLibraries;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,117 +10,103 @@ using Ultraviolet.Graphics.Graphics2D;
 using Ultraviolet.Platform;
 
 
-namespace ultraviolettesting
+namespace CellWars
 {
     class Cell
     {
         public static int cellSize { get; set; }
 
-        private static Texture2D texture;
-        private static IUltravioletWindow window;
+        private static Texture2D texture, selectTexture;
+        //private static IUltravioletWindow window;
         private static Random rng;
-        private static Cell[][] allCells;
+        private static CellManager manager;
 
-        public double Hue
-        {
-            get
-            {
-                return Extensions.HueFromColor(color);
-            }
-            set
-            {
-                int hueInt = (int)value;
-                double fractional = value - hueInt;
-                if (hueInt > 360)
-                {
-                    hueInt = hueInt % 360;
-                }
-                else if (hueInt < 0)
-                {
-                    hueInt = hueInt % 360;
-                    hueInt = 360 + hueInt;
-                }
-                double hue = hueInt + fractional;
-                color = Extensions.ColorFromHSV(hue, 1.0f, 1.0f);
-            }
-        }
+
 
         private Vector2 position;
         private Cell[] neighbors;
-        private Color color;
 
-        //life stuff
+        //nonbreedable stuff
         public bool IsAlive { get; private set; } = false;
         private bool hasCorpse = false;
         private Cell mother, father;
-        //life stats
-        private double _maxLifeTime;
-        private double _currentLifeTime;
-        private double _breedChance;
-        private double _maxHueDistance;
 
-        public double MaxLifeTime
+        private Guid m_primogenitorID;
+        public Guid PrimogenitorID
         {
-            get
-            {
-                return Math.Clamp(_maxLifeTime, 1.5, 10.0);
-            }
-            private set
-            {
-                _maxLifeTime = value;
-            }
+            get { return m_primogenitorID; }
+            private set { m_primogenitorID = value; }
         }
-        public double CurrentLifeTime
+
+        private double m_health;
+        public double Health
+        {
+            get { return m_health; }
+            private set { m_health = value; }
+        }
+        public double TimeAlive { get; private set; } = 0;
+
+        public bool Selected { get; set; } = false;
+        public bool Hostile { get; private set; }
+
+
+        //breedable stats private
+        private double m_maxHealth;
+        private double m_breedChance;
+        private double m_maxHueDistance;
+        private double m_damage;
+
+        //breedable stats publics
+        public CellColor CellColor { get; private set; }
+        public double MaxHealth
         {
             get
             {
-                return _currentLifeTime;
+                return m_maxHealth;
             }
             private set
             {
-                _currentLifeTime = value;
+                m_maxHealth = Math.Max(value, 10d);
             }
         }
         public double BreedChance
         {
             get
             {
-                return Math.Clamp(_breedChance, 0.05, 0.35);
+                return Math.Clamp(m_breedChance, 0.05, 0.35);
             }
-            private set { _breedChance = Math.Clamp(value, 0.05, 0.35); }
+            private set { m_breedChance = Math.Clamp(value, 0.05, 0.35); }
         }
         public double MaxHueDistance
         {
             get
             {
-                return _maxHueDistance;
+                return m_maxHueDistance;
             }
             private set
             {
-                _maxHueDistance = value;
+                m_maxHueDistance = value;
             }
         }
-
-        private double _damagePercent;
-
-        public double DamagePercent
+        public double Damage
         {
-            get { return Math.Clamp(_damagePercent, 0.15, 0.90); }
-            set { _damagePercent = Math.Clamp(value, 0.15, 0.90); }
+            get { return m_damage; }
+            set { m_damage = Math.Clamp(value, 0.25, 9d); }
         }
 
-        public bool Hostile { get; private set; }
 
-        public Cell(Texture2D _texture, IUltravioletWindow _window, Vector2 _position, ref Cell[][] _allCells)
+        public Cell(Texture2D _texture, Texture2D _hostileTex, /*IUltravioletWindow _window,*/ Vector2 _position, CellManager _manager)
         {
             if (rng == null)
                 rng = new Random();
             if (texture == null)
                 texture = _texture;
-            if (window == null)
-                window = _window;
-            if (allCells == null)
-                allCells = _allCells;
+            if (selectTexture == null)
+                selectTexture = _hostileTex;
+            //if (window == null)
+            //    window = _window;
+            if (manager == null)
+                manager = _manager;
             neighbors = new Cell[8];
 
             position = _position;
@@ -130,75 +118,123 @@ namespace ultraviolettesting
             hasCorpse = false;
             IsAlive = false;
             Hostile = false;
-            color = Color.White;
+            CellColor = new CellColor(Color.White);
         }
 
         internal void Draw(UltravioletTime time, ref SpriteBatch spriteBatch)
         {
-            if (position.X > window.DrawableSize.Width || position.Y > window.DrawableSize.Height || position.X * cellSize < 0 || position.Y * cellSize < 0)
-            {
-                return;
-            }
+            if (Selected)
+                spriteBatch.Draw(selectTexture, position * cellSize, CellColor.Color);
+            else
+                spriteBatch.Draw(texture, position * cellSize, CellColor.Color);
 
-            spriteBatch.Draw(texture, position * cellSize, color);
+            Selected = false;
         }
 
-        internal void Update(UltravioletTime time)
+        internal void Update(double deltaTime)
         {
-            if (position.X > window.DrawableSize.Width || position.Y > window.DrawableSize.Height || position.X * cellSize < 0 || position.Y * cellSize < 0)
+            //if (position.X > window.DrawableSize.Width ||
+            //    position.Y > window.DrawableSize.Height ||
+            //    position.X * cellSize < 0 ||
+            //    position.Y * cellSize < 0)
+            //{
+            //    return;
+            //}       
+
+            if (!IsAlive) return;
+
+            TimeAlive += deltaTime;
+            Health -= deltaTime;
+
+            if (Health <= 0)
             {
+                Die();
                 return;
             }
-
-            if (IsAlive)
+            else
             {
-                if (CurrentLifeTime > MaxLifeTime)
+                if (Hostile)
                 {
-                    Die();
-                    return;
+                    AttackNearestEnemy();
                 }
-                else
+
+                if (Health >= (MaxHealth * .75d) && rng.NextDouble(0d, 1d) <= BreedChance)
                 {
-                    CurrentLifeTime += time.ElapsedTime.TotalSeconds;
-                    if (Hostile)
-                    {
-                        AttackNearestEnemy();
-                    }
-                    if (CurrentLifeTime >= (MaxLifeTime * .25) && rng.NextDouble() <= BreedChance)
-                    {
-                        Breed();
-                    }
-                    else if (CurrentLifeTime >= (MaxLifeTime * .65))
-                    {
-                        var deadNeighbors = GetDeadNeighbors();
-                        if (deadNeighbors.Count > 0)
-                        {
-                            Eat(deadNeighbors[0]);
-                        }
-                    }
+                    Breed();
+                }
+
+                Hostile = HasEnemyNeighbor();
+
+                var deadNeighbors = GetDeadNeighbors();
+                if (deadNeighbors.Count > 0)
+                {
+                    Eat(deadNeighbors[0]);
                 }
             }
-
-
-            //random color cycling, cool but slow and not really useful for anything
-            //color = ColorExtensions.ColorFromHSV(hue % 360f, 1f, 1f);
-            //hue += (float)(colorSpeed * time.ElapsedTime.TotalSeconds);
         }
 
         private void AttackNearestEnemy()
         {
-            List<Cell> shuffled = new List<Cell>(neighbors);
+            List<Cell> shuffled = GetEnemyNeighbors();
+            if (shuffled.Count == 0) return;
+
             shuffled.Shuffle();
-            foreach (Cell neighbor in shuffled)
+            var enemy = shuffled[0];
+
+            if (enemy.TakeDamage(Damage))
+                Eat(enemy);
+
+            return;
+
+        }
+
+        /// <summary>
+        /// Makes the cell take damage and returns true if it dies
+        /// </summary>
+        /// <param name="damageTaken"></param>
+        /// <returns>true if damage killed cell, false if not</returns>
+        private bool TakeDamage(double damageTaken)
+        {
+            Health -= damageTaken;
+            if (Health <= 0)
             {
-                if (neighbor != null
-                    && neighbor.IsAlive
-                    && Extensions.FloatDistance(this.Hue, neighbor.Hue) > MaxHueDistance)
+                Die();
+                return true;
+            }
+            return false;
+        }
+
+        private bool HasEnemyNeighbor()
+        {
+            foreach (Cell neighbor in neighbors)
+            {
+                if (neighbor == null) continue;
+
+                if (!IsCloseFamily(neighbor))
                 {
-                    neighbor.CurrentLifeTime += neighbor.MaxLifeTime * (DamagePercent);
-                    return;
+                    if (IsExtendedFamily(neighbor))
+                    {
+                        continue;
+                    }
+
+                    return true;
                 }
             }
+            return false;
+        }
+        private List<Cell> GetEnemyNeighbors()
+        {
+            List<Cell> enemyNeighbors = new List<Cell>();
+            foreach (Cell neighbor in neighbors)
+            {
+                if (neighbor == null) continue;
+
+                if (!IsCloseFamily(neighbor))
+                {
+                    enemyNeighbors.Add(neighbor);
+                }
+            }
+            return enemyNeighbors;
         }
 
         private List<Cell> GetDeadNeighbors()
@@ -219,16 +255,16 @@ namespace ultraviolettesting
             int i = (int)position.X;
             int j = (int)position.Y;
 
-            neighbors[0] = allCells.Get2DValueOrNull(i - 1, j - 1);
-            neighbors[1] = allCells.Get2DValueOrNull(i - 1, j);
-            neighbors[2] = allCells.Get2DValueOrNull(i - 1, j + 1);
+            neighbors[0] = manager.GetCell(i - 1, j - 1);
+            neighbors[1] = manager.GetCell(i - 1, j);
+            neighbors[2] = manager.GetCell(i - 1, j + 1);
 
-            neighbors[3] = allCells.Get2DValueOrNull(i, j - 1);
-            neighbors[4] = allCells.Get2DValueOrNull(i, j + 1);
+            neighbors[3] = manager.GetCell(i, j - 1);
+            neighbors[4] = manager.GetCell(i, j + 1);
 
-            neighbors[5] = allCells.Get2DValueOrNull(i + 1, j - 1);
-            neighbors[6] = allCells.Get2DValueOrNull(i + 1, j);
-            neighbors[7] = allCells.Get2DValueOrNull(i + 1, j + 1);
+            neighbors[5] = manager.GetCell(i + 1, j - 1);
+            neighbors[6] = manager.GetCell(i + 1, j);
+            neighbors[7] = manager.GetCell(i + 1, j + 1);
         }
 
         internal void Clicked(bool spawnNeighbors = false)
@@ -236,11 +272,13 @@ namespace ultraviolettesting
             Born(null, null);
             if (spawnNeighbors)
             {
+                PrimogenitorID = Guid.NewGuid();
                 foreach (Cell startingMate in neighbors)
                 {
                     if (startingMate == null) continue;
                     startingMate.Clicked(false);
-                    startingMate.Hue = Hue;
+                    startingMate.CellColor.Hue = CellColor.Hue;
+                    startingMate.PrimogenitorID = PrimogenitorID;
                 }
             }
         }
@@ -250,51 +288,59 @@ namespace ultraviolettesting
             IsAlive = true;
             hasCorpse = false;
             Hostile = false;
-            CurrentLifeTime = 0;
+            CellColor.Saturation = 1;
+            CellColor.Value = 1;
+            TimeAlive = 0;
 
-            double randomGeneticMultiplier = rng.GetRandomSignedDouble();
             if (mother != null && father != null)
             {
                 //sexual reproduction
 
-                double avgHue = (mother.Hue + father.Hue) / 2;
-                Hue = avgHue + rng.GetRandomSignedDouble(2 + randomGeneticMultiplier);
+                double avgHue = (mother.CellColor.Hue + father.CellColor.Hue) / 2;
+                CellColor.Hue = avgHue + rng.NextDouble(-1, 1);
 
-                double avgMaxLifeTime = (mother.MaxLifeTime + father.MaxLifeTime) / 2;
-                MaxLifeTime = avgMaxLifeTime + rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                double avgMaxLifeTime = (mother.MaxHealth + father.MaxHealth) / 2;
+                MaxHealth = avgMaxLifeTime + rng.NextDouble(-1, 1);
 
                 double avgBreedChance = (mother.BreedChance + father.BreedChance) / 2;
-                BreedChance = avgBreedChance + rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                BreedChance = avgBreedChance + rng.NextDouble(-1, 1);
 
                 double avgMaxHueDistance = (mother.MaxHueDistance + father.MaxHueDistance) / 2;
-                MaxHueDistance = avgMaxHueDistance + rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                MaxHueDistance = avgMaxHueDistance + rng.NextDouble(-1, 1);
 
-                double avgDamagePercent = (mother.DamagePercent + father.DamagePercent) / 2;
-                DamagePercent = avgDamagePercent + rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                double avgDamage = (mother.Damage + father.Damage) / 2;
+                Damage = avgDamage + rng.NextDouble(-1, 1);
+
+                PrimogenitorID = mother.PrimogenitorID;
             }
             else if (mother != null && father == null)
             {
                 //asexual reproduction
 
-                Hue = mother.Hue * rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                CellColor.Hue = mother.CellColor.Hue + rng.NextDouble(-1, 1);
 
-                MaxLifeTime = mother.MaxLifeTime + rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                MaxHealth = mother.MaxHealth + rng.NextDouble(-1, 1);
 
-                BreedChance = mother.BreedChance + rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                BreedChance = mother.BreedChance + rng.NextDouble(-1, 1);
 
-                MaxHueDistance = mother.MaxHueDistance + rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                MaxHueDistance = mother.MaxHueDistance + rng.NextDouble(-1, 1);
 
-                DamagePercent = mother.DamagePercent + rng.GetRandomSignedDouble(randomGeneticMultiplier);
+                Damage = mother.Damage + rng.NextDouble(-1, 1);
+
+                PrimogenitorID = mother.PrimogenitorID;
 
             }
             else
             {
-                Hue = rng.NextDouble() * 360.0;
-                MaxLifeTime = rng.NextDouble() * 5.0;
-                BreedChance = rng.NextDouble() * .5;
-                MaxHueDistance = rng.NextDouble() * 10;
-                DamagePercent = rng.NextDouble() * .5;
+                CellColor = new CellColor(rng.NextDouble(0, 360));
+                MaxHealth = rng.NextDouble(1.5, 5);
+                BreedChance = rng.NextDouble(0.1, 0.5);
+                MaxHueDistance = rng.NextDouble(5, 15);
+                Damage = rng.NextDouble(0.1, 1d);
+                PrimogenitorID = Guid.NewGuid();
             }
+
+            Health = MaxHealth;
         }
 
         internal void Die()
@@ -302,21 +348,24 @@ namespace ultraviolettesting
             IsAlive = false;
             hasCorpse = true;
             Hostile = false;
+            Selected = false;
             mother = null;
             father = null;
-            color = Extensions.ColorFromHSV(Hue, 1, .5);
+            CellColor.Value = .1;
+            CellColor.Saturation = .1;
+            TimeAlive = 0;
+            if (manager.SelectedCell == this)
+                manager.SelectedCell = null;
         }
 
         private void Eat(Cell toEat)
         {
             if (toEat.hasCorpse)
             {
-                CurrentLifeTime -= toEat.MaxLifeTime * .5;
-                if (CurrentLifeTime < 0)
-                {
-                    CurrentLifeTime = 0;
-                }
-                this.Hue += Math.Clamp((Hue - toEat.Hue) * 0.1, -2, 2);
+                Health += toEat.MaxHealth * .5;
+
+                CellColor.ShiftTowards(toEat.CellColor);
+
                 toEat.Initialize();
             }
         }
@@ -337,39 +386,35 @@ namespace ultraviolettesting
                         Eat(child);
                     }
 
-                    if (child.neighbors.CheckIfNoUnwantedNeighbors(this, MaxHueDistance))
-                    {
-                        child.Born(this, mate);
-                    }
-                    else
-                    {
-                        Hostile = true;
-                    }
+                    child.Born(this, mate);
                 }
             }
         }
 
         private Cell GetAndCheckChild()
         {
+            var shuffled = new List<Cell>(neighbors);
+            shuffled.Shuffle();
+
             //check for dying neighbors to replace
             Cell firstCorpse = null;
-            for (int i = 0; i < neighbors.Length; i++)
+            for (int i = 0; i < shuffled.Count; i++)
             {
-                if (neighbors[i] != null && neighbors[i].hasCorpse)
+                if (shuffled[i] != null && shuffled[i].hasCorpse)
                 {
-                    firstCorpse = neighbors[i];
+                    firstCorpse = shuffled[i];
                 }
             }
+
             if (firstCorpse != null)
             {
                 firstCorpse.Die();
                 return firstCorpse;
             }
-            //if none, do normal
             else
             {
-                var shuffled = new List<Cell>(neighbors);
-                shuffled.Shuffle();
+                //if none, do normal
+
                 var child = shuffled[rng.Next(0, shuffled.Count)];
                 if (child != null && !child.IsAlive && !child.hasCorpse)
                 {
@@ -381,8 +426,44 @@ namespace ultraviolettesting
 
         public override string ToString()
         {
-            return String.Format("Cur Lifespan: {0:0.000}    Cur Hue Distance: {1:0.000}    Cur Breed Chance: {2:0.000}    Cur cell life: {3:0.000}    Cur Hue: {4:0.000}\n",
-                                   MaxLifeTime, MaxHueDistance, BreedChance, CurrentLifeTime, Hue);
+            if (IsAlive)
+                return $"-|------ {position}\n" +
+                       $" |MaxHP: {MaxHealth:0.000} | MHD: {MaxHueDistance:0.000} | BC: {BreedChance:0.000}\n" +
+                       $" |CurHP: {Health:0.000} | Hue: {CellColor.Hue:0.000} | Hostile: {Hostile}\n" +
+                       $" |Damage: {Damage:0.000} | Alive: {TimeAlive:0.000}s | \n" +
+                       $" |PID: {PrimogenitorID.ToString().Substring(0, 8)}\n";
+            else
+                return $"-|------ {position}\n" +
+                       $" | Dead has corpse: {hasCorpse}";
+        }
+
+        public bool IsCloseFamily(Cell cellToCheck)
+        {
+            if (cellToCheck == null) return false;
+            if (cellToCheck.IsAlive)
+            {
+                if (CellColor.Distance(CellColor, cellToCheck.CellColor) > MaxHueDistance)
+                    return false;
+                else
+                    return true;
+            }
+            return false;
+        }
+
+        public bool IsExtendedFamily(Cell cellToCheck)
+        {
+            if (cellToCheck == null) return false;
+            if (cellToCheck.IsAlive)
+            {
+                if (PrimogenitorID == cellToCheck.PrimogenitorID)
+                {
+                    if (CellColor.Distance(CellColor, cellToCheck.CellColor) <= MaxHueDistance * 2)
+                    {
+                        return true;
+                    }                    
+                }
+            }
+            return false;
         }
     }
 }

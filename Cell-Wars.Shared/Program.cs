@@ -1,4 +1,4 @@
-﻿namespace ultraviolettesting
+﻿namespace CellWars
 {
     public static class Program
     {

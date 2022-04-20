@@ -11,10 +11,18 @@ using Ultraviolet.Input;
 using Ultraviolet.OpenGL;
 using Ultraviolet.Platform;
 
-namespace ultraviolettesting
+namespace CellWars
 {
     public partial class Game : UltravioletApplication
     {
+        private ContentManager contentManager;
+        private SpriteBatch spriteBatch;
+        private KeyboardDevice kb;
+        private IUltravioletWindow window;
+        private MouseDevice mouse;
+        private bool paused = false, displayOff = false;
+        private CellManager cells;
+        
         public Game()
             : base("Daxtron2", "Cell Wars")
         { }
@@ -52,28 +60,11 @@ namespace ultraviolettesting
         {
             this.contentManager = ContentManager.Create("Content");
             Texture2D cellImg = contentManager.Load<Texture2D>("1x1.bmp");
-            Cell.cellSize = cellImg.Width;
+            Texture2D selectedCellImg = contentManager.Load<Texture2D>("hostile.bmp");
             this.spriteBatch = SpriteBatch.Create();
 
-            this.cells = new Cell[window.DrawableSize.Width / Cell.cellSize][];
+            cells = new CellManager(cellImg, selectedCellImg, window.DrawableSize.Width, window.DrawableSize.Height);
 
-
-            for (int x = 0; x < window.DrawableSize.Width / Cell.cellSize; x++)
-            {
-                cells[x] = new Cell[window.DrawableSize.Height / Cell.cellSize];
-                for (int y = 0; y < window.DrawableSize.Height / Cell.cellSize; y++)
-                {
-                    cells[x][y] = new Cell(cellImg, window, new Vector2(x, y), ref cells);
-                }
-            }
-
-            for (int x = 0; x < cells.Length; x++)
-            {
-                for (int y = 0; y < cells[x].Length; y++)
-                {
-                    cells[x][y].GetNeighbors();
-                }
-            }
             base.OnLoadingContent();
         }
 
@@ -81,18 +72,14 @@ namespace ultraviolettesting
         {
             Controls(time);
 
-            if (!paused)
-            {
-                for (int x = 0; x < cells.Length; x++)
-                {
-                    for (int y = 0; y < cells[x].Length; y++)
-                    {
-                        cells[x][y].Update(time);
-                    }
-                }
-            }
-            //Console.WriteLine(window.DrawableSize.Width);
+            ProcessTimeStep(time, paused);
+            
             base.OnUpdating(time);
+        }
+
+        protected void ProcessTimeStep(UltravioletTime time, bool _pause = false)
+        {
+            cells.ProcessTimeStep(time, _pause);
         }
 
         private void Controls(UltravioletTime time)
@@ -103,16 +90,27 @@ namespace ultraviolettesting
             }
             if (mouse.IsButtonClicked(MouseButton.Left))
             {
-                //Console.WriteLine("click at {0}!", mouse.Position);
                 var cellPos = mouse.Position / Cell.cellSize;
-                //cells[cellPos.X][cellPos.Y].Clicked(true);
-                Console.WriteLine("~~ Cell at {0}", cellPos);
-                Console.WriteLine(cells[cellPos.X][cellPos.Y]);
+                if (kb.IsKeyDown(Key.LeftShift))
+                {
+                    cells.CurrentSelectionType = CellManager.SelectionType.Primogenitor;
+                    cells.SelectPrimogenitorLine(cellPos);
+                }
+                else if (kb.IsKeyDown(Key.LeftControl))
+                {
+                    cells.CurrentSelectionType = CellManager.SelectionType.Familial;
+                    cells.SelectAllFamilialCells(cellPos);
+                }
+                else
+                {
+                    cells.CurrentSelectionType = CellManager.SelectionType.Single;
+                    Console.WriteLine(cells.GetCellInfo(cellPos));
+                }
             }
             else if (mouse.IsButtonClicked(MouseButton.Right))
             {
                 var cellPos = mouse.Position / Cell.cellSize;
-                cells[cellPos.X][cellPos.Y].Clicked(true);
+                cells.SpawnCells(cellPos, true);
             }
             if (kb.IsKeyPressed(Key.I))
             {
@@ -137,24 +135,25 @@ namespace ultraviolettesting
             }
             if (kb.IsKeyPressed(Key.R))
             {
-                Console.Clear();
-                for (int x = 0; x < cells.Length; x++)
-                {
-                    for (int y = 0; y < cells[x].Length; y++)
-                    {
-                        cells[x][y].Die();
-                        cells[x][y].Clicked();
-                    }
-                }
+                cells.Clear();
+                cells.RandomSpawns();                
             }
             if (kb.IsKeyPressed(Key.Space))
             {
                 paused = !paused;
             }
 
-            if (kb.IsKeyPressed(Key.H)) displayOff = true;
+            if(paused && kb.IsKeyPressed(Key.Period))
+            {
+                ProcessTimeStep(time);
+            }
 
-            if (kb.IsKeyReleased(Key.H)) displayOff = false;
+            if (kb.IsKeyPressed(Key.Q)) displayOff = true;
+            
+            if (kb.IsKeyReleased(Key.Q)) displayOff = false;
+
+            if (kb.IsKeyPressed(Key.H))
+                CellManager.DrawDebug = !CellManager.DrawDebug;
         }
 
         protected override void OnDrawing(UltravioletTime time)
@@ -162,17 +161,10 @@ namespace ultraviolettesting
             this.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
             if (!displayOff)
             {
-                for (int x = 0; x < cells.Length; x++)
-                {
-                    for (int y = 0; y < cells[x].Length; y++)
-                    {
-                        cells[x][y].Draw(time, ref this.spriteBatch);
-                    }
-                }
+                cells.Draw(time, ref this.spriteBatch);
             }
             this.spriteBatch.End();
-            //Console.WriteLine(time.ElapsedTime.TotalMilliseconds);
-
+            
             base.OnDrawing(time);
         }
 
@@ -188,14 +180,5 @@ namespace ultraviolettesting
             }
             base.Dispose(disposing);
         }
-
-        private ContentManager contentManager;
-        private SpriteBatch spriteBatch;
-        private Cell[][] cells;
-        private KeyboardDevice kb;
-        private IUltravioletWindow window;
-        private MouseDevice mouse;
-        private bool paused = false, displayOff = false;
-
     }
 }

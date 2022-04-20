@@ -6,16 +6,22 @@
     <SharedGUID>3e1c0c3c-1967-4ac7-be58-636f7c8f9e56</SharedGUID>
   </PropertyGroup>
   <PropertyGroup Label="Configuration">
-    <Import_RootNamespace>Cell-Wars</Import_RootNamespace>
+    <Import_RootNamespace>CellWars</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)BreedableTypes\BreedableType.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Cell.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CellManager.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Game.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BreedableTypes\CellColor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Program.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="$(MSBuildThisFileDirectory)Content\1x1.bmp">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(MSBuildThisFileDirectory)Content\hostile.bmp">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

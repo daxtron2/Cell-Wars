@@ -1,12 +1,12 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <ApplicationIcon />
     <StartupObject />
-    <RootNamespace>Cell-Wars</RootNamespace>
-    <AssemblyName>Cell-Wars</AssemblyName>
+    <RootNamespace>CellWars</RootNamespace>
+    <AssemblyName>CellWars</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="KGySoft.CoreLibraries" Version="6.0.2" />
     <PackageReference Include="Ultraviolet" Version="2020.4.0.4278" />
     <PackageReference Include="Ultraviolet.BASS" Version="2020.4.0.4278" />
     <PackageReference Include="Ultraviolet.FreeType2" Version="2020.4.0.4278" />
